@@ -44,7 +44,7 @@ endif
 # Enables the use of FPU on Cortex-M4.
 # Enable this if you really want to use the STM FWLib.
 ifeq ($(USE_FPU),)
-  USE_FPU = no
+  USE_FPU = yes
 endif
 
 # Enable this if you really want to use the STM FWLib.
@@ -70,6 +70,7 @@ include $(CHIBIOS)/os/hal/platforms/STM32F4xx/platform.mk
 include $(CHIBIOS)/os/hal/hal.mk
 include $(CHIBIOS)/os/ports/GCC/ARMCMx/STM32F4xx/port.mk
 include $(CHIBIOS)/os/kernel/kernel.mk
+include $(CHIBIOS)/os/various/lwip_bindings/lwip.mk
 include $(CHIBIOS)/test/test.mk
 
 # Define linker script file here
@@ -84,8 +85,9 @@ CSRC = $(PORTSRC) \
        $(HALSRC) \
        $(PLATFORMSRC) \
        $(BOARDSRC) \
-       $(CHIBIOS)/os/various/devices_lib/accel/lis302dl.c \
+       $(LWSRC) \
        $(CHIBIOS)/os/various/chprintf.c \
+       $(CHIBIOS)/os/various/evtimer.c \
        main.c
 
 # C++ sources that can be compiled in ARM or THUMB mode depending on the global
@@ -116,8 +118,7 @@ TCPPSRC =
 ASMSRC = $(PORTASM)
 
 INCDIR = $(PORTINC) $(KERNINC) $(TESTINC) \
-         $(HALINC) $(PLATFORMINC) $(BOARDINC) \
-         $(CHIBIOS)/os/various/devices_lib/accel \
+         $(HALINC) $(PLATFORMINC) $(BOARDINC) $(LWINC) \
          $(CHIBIOS)/os/various
 
 #

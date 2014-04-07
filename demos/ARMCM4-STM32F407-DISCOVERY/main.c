@@ -17,6 +17,18 @@
 #include "ch.h"
 #include "hal.h"
 #include "test.h"
+#include <string.h>
+#include "chprintf.h"
+
+#include "lwip/arch.h"
+#include "lwip/api.h"
+#include "lwip/netbuf.h"
+#include "lwip/netifapi.h"
+#include "lwip/mem.h"
+
+#include <lwip/tcpip.h>
+#include <netif/slipif.h>
+
 
 static void pwmpcb(PWMDriver *pwmp);
 static void adccb(ADCDriver *adcp, adcsample_t *buffer, size_t n);
@@ -175,6 +187,15 @@ int main(void) {
    * - Kernel initialization, the main() function becomes a thread and the
    *   RTOS is active.
    */
+
+  /* Network interface variables */
+  struct ip_addr ipaddr, netmask, gw;
+  struct netif netif;
+  struct netconn *xUdpConn;
+  struct netbuf  *xNetBuf;
+  void *xBuf;
+  int i;
+
   halInit();
   chSysInit();
 
@@ -237,9 +258,37 @@ int main(void) {
    * pressed the test procedure is launched with output on the serial
    * driver 2.
    */
+
+  /* Set network address variables */
+  IP4_ADDR(&gw, 192,168,0,1);
+  IP4_ADDR(&ipaddr, 192,168,0,2);
+  IP4_ADDR(&netmask, 255,255,255,0);
+
+  tcpip_init(NULL, NULL);
+
+  netifapi_netif_add(&netif, &ipaddr, &netmask, &gw, NULL, slipif_init, tcpip_input);
+  netif_set_default(&netif);
+  netif_set_up(&netif);
+
+
+  xUdpConn = netconn_new( NETCONN_UDP );
+  netconn_bind(xUdpConn, &ipaddr, 1234);
+
+  xBuf = (void*)mem_malloc(10);
+  memset(xBuf,0xAA,10);
+  xNetBuf = netbuf_new ();
+  netbuf_ref ( xNetBuf, xBuf, 10 );
+
+
+  IP4_ADDR(&ipaddr, 192,168,0,255);
+
   while (TRUE) {
     if (palReadPad(GPIOA, GPIOA_BUTTON))
       TestThread(&SD2);
     chThdSleepMilliseconds(500);
+    for(i = 1000;i>0;i--){
+        netconn_sendto(xUdpConn, xNetBuf, &ipaddr, 1234);
+    }
+
   }
 }

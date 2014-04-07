@@ -2,11 +2,11 @@
 LWIP = 	${CHIBIOS}/ext/lwip
 
 LWBINDSRC = \
-        $(CHIBIOS)/os/various/lwip_bindings/lwipthread.c \
-        $(CHIBIOS)/os/various/lwip_bindings/arch/sys_arch.c
+        $(CHIBIOS)/os/various/lwip_bindings/arch/sys_arch.c \
+        $(CHIBIOS)/os/various/lwip_bindings/arch/sio.c
 
 LWNETIFSRC = \
-        ${LWIP}/src/netif/etharp.c
+        ${LWIP}/src/netif/slipif.c
 
 LWCORESRC = \
         ${LWIP}/src/core/dhcp.c \
