@@ -183,9 +183,9 @@ static msg_t Thread1(void *arg) {
   void *xBuf;
   int i;
   struct netcommand{
-	  int8_t type;
-	  int8_t addr;
-	  int32_t command;
+	  uint8_t type;
+	  uint8_t addr;
+	  uint32_t command;
   } netcommand_buf;
 
   enum netcommand_type{
@@ -199,6 +199,8 @@ static msg_t Thread1(void *arg) {
 	  set_reportOpt = 7,
 	  set_TxPwrOn = 8
   };
+
+#define PWR_MAGIC 0xA0A0BEEF
 
   IP4_ADDR(&gw, 192,168,222,1);
   IP4_ADDR(&ipaddr, 192,168,222,2);
@@ -270,7 +272,42 @@ static msg_t Thread1(void *arg) {
     		palClearPad(GPIOD, 9);
     		break;
     	case(set_InSel):
+    		if(netcommand_buf.command&0x2){
+    			palSetPad(GPIOB, 8);
+    			palClearPad(GPIOB, 9);
+    		}
+    		else{
+    			palSetPad(GPIOB, 9);
+    			palClearPad(GPIOB, 8);
+    		}
+    		if(netcommand_buf.command&0x1){
+    	    	palSetPad(GPIOE, 0);
+    	    	palClearPad(GPIOE, 1);
+    	    }
+    	    else{
+    	    	palSetPad(GPIOE, 1);
+    	    	palClearPad(GPIOE, 0);
+    	    }
 
+			break;
+    	case(set_TxPwrOn):
+    		if(netcommand_buf.command == PWR_MAGIC){
+    			palSetPad(GPIOE, 11);
+    		}
+    		else{
+    			palClearPad(GPIOE, 11);
+    		}
+    		break;
+    	case(set_OOK):
+    	    if(netcommand_buf.command == PWR_MAGIC){
+    	    	palClearPad(GPIOE, 12);
+    	    	palSetPad(GPIOE, 13);
+    	    }
+    	    else{
+    	    	palSetPad(GPIOE, 12);
+    	    	palClearPad(GPIOE, 13);
+    	    }
+    	    		break;
     	default:
     		break;
 
@@ -325,7 +362,8 @@ int main(void) {
   spiStart(&SPID2, &spi2cfg);
   palSetPad(GPIOB, 12);
   palClearPad(GPIOD, 8);
-  palClearPad(GPIOD, 9);
+  //palClearPad(GPIOD, 9);
+  palClearPad(GPIOE, 11);
   palSetPadMode(GPIOB, 12, PAL_MODE_OUTPUT_PUSHPULL |
                            PAL_STM32_OSPEED_HIGHEST);           /* NSS.     */
   palSetPadMode(GPIOD, 8, PAL_MODE_OUTPUT_PUSHPULL |
