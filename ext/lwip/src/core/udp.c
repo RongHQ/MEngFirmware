@@ -64,6 +64,8 @@
 
 #include <string.h>
 
+//#include "hal.h"
+
 #ifndef UDP_LOCAL_PORT_RANGE_START
 /* From http://www.iana.org/assignments/port-numbers:
    "The Dynamic and/or Private Ports are those from 49152 through 65535" */
@@ -401,6 +403,7 @@ udp_input(struct pbuf *p, struct netif *inp)
       if (pcb->recv != NULL) {
         /* now the recv function is responsible for freeing p */
         pcb->recv(pcb->recv_arg, pcb, p, ip_current_src_addr(), src);
+        //palTogglePad(GPIOD, GPIOD_LED4);
       } else {
         /* no recv function registered? then we have to free the pbuf! */
         pbuf_free(p);

@@ -123,7 +123,7 @@
  * a lot of data that needs to be copied, this should be set high.
  */
 #ifndef MEM_SIZE
-#define MEM_SIZE                        1600
+#define MEM_SIZE                        6400
 #endif
 
 /**
@@ -315,7 +315,7 @@
  * (only needed if you use the sequential API, like api_lib.c)
  */
 #ifndef MEMP_NUM_NETBUF
-#define MEMP_NUM_NETBUF                 2
+#define MEMP_NUM_NETBUF                 32
 #endif
 
 /**
@@ -341,7 +341,7 @@
  * (only needed if you use tcpip.c)
  */
 #ifndef MEMP_NUM_TCPIP_MSG_INPKT
-#define MEMP_NUM_TCPIP_MSG_INPKT        8
+#define MEMP_NUM_TCPIP_MSG_INPKT        16
 #endif
 
 /**
@@ -1352,7 +1352,7 @@
  * to sys_mbox_new() when the recvmbox is created.
  */
 #ifndef DEFAULT_UDP_RECVMBOX_SIZE
-#define DEFAULT_UDP_RECVMBOX_SIZE       4
+#define DEFAULT_UDP_RECVMBOX_SIZE       16
 #endif
 
 /**

@@ -29,6 +29,14 @@
 #include <lwip/tcpip.h>
 #include <netif/slipif.h>
 
+static const unsigned char BitReverseTable64[] =
+{
+  0x00, 0x80, 0x40, 0xC0, 0x20, 0xA0, 0x60, 0xE0, 0x10, 0x90, 0x50, 0xD0, 0x30, 0xB0, 0x70, 0xF0,
+  0x08, 0x88, 0x48, 0xC8, 0x28, 0xA8, 0x68, 0xE8, 0x18, 0x98, 0x58, 0xD8, 0x38, 0xB8, 0x78, 0xF8,
+  0x04, 0x84, 0x44, 0xC4, 0x24, 0xA4, 0x64, 0xE4, 0x14, 0x94, 0x54, 0xD4, 0x34, 0xB4, 0x74, 0xF4,
+  0x0C, 0x8C, 0x4C, 0xCC, 0x2C, 0xAC, 0x6C, 0xEC, 0x1C, 0x9C, 0x5C, 0xDC, 0x3C, 0xBC, 0x7C, 0xFC
+};
+
 
 static void pwmpcb(PWMDriver *pwmp);
 static void adccb(ADCDriver *adcp, adcsample_t *buffer, size_t n);
@@ -88,16 +96,14 @@ static PWMConfig pwmcfg = {
 
 /*
  * SPI2 configuration structure.
- * Speed 21MHz, CPHA=0, CPOL=0, 16bits frames, MSb transmitted first.
- * The slave select line is the pin 12 on the port GPIOA.
+ * Speed 5.25MHz, CPHA=0, CPOL=0, 16bits frames, LSb transmitted first.
+ * The slave select line is the pin 12 on the port GPIOB.
  */
-static const SPIConfig spi2cfg = {
-  spicb,
+static const SPIConfig spi2cfg =
+  { NULL,
   /* HW dependent part.*/
-  GPIOB,
-  12,
-  SPI_CR1_DFF
-};
+  GPIOB, 12,
+  SPI_CR1_DFF | SPI_CR1_LSBFIRST |SPI_CR1_BR_1 };
 
 /*
  * PWM cyclic callback.
@@ -140,8 +146,8 @@ void adccb(ADCDriver *adcp, adcsample_t *buffer, size_t n) {
     pwmEnableChannelI(&PWMD4, 3, PWM_FRACTION_TO_WIDTH(&PWMD4, 4096, avg_ch2));
 
     /* SPI slave selection and transmission start.*/
-    spiSelectI(&SPID2);
-    spiStartSendI(&SPID2, ADC_GRP1_NUM_CHANNELS * ADC_GRP1_BUF_DEPTH, samples);
+    //spiSelectI(&SPID2);
+    //spiStartSendI(&SPID2, ADC_GRP1_NUM_CHANNELS * ADC_GRP1_BUF_DEPTH, samples);
 
     chSysUnlockFromIsr();
   }
@@ -167,12 +173,114 @@ static msg_t Thread1(void *arg) {
 
   (void)arg;
   chRegSetThreadName("blinker");
+
+  /* Network interface variables */
+  struct ip_addr ipaddr, netmask, gw;
+  struct netif netif;
+  struct netconn *xUdpConn;
+  struct netbuf  *xNetBuf;
+  struct netbuf  *RecvBuf;
+  void *xBuf;
+  int i;
+  struct netcommand{
+	  int8_t type;
+	  int8_t addr;
+	  int32_t command;
+  } netcommand_buf;
+
+  enum netcommand_type{
+	  set_syn = 0,
+	  set_RxAtt = 1,
+	  set_TxAtt = 2,
+	  set_LOAtt = 3,
+	  set_InSel = 4,
+	  set_OOK = 5,
+	  get_vsence = 6,
+	  set_reportOpt = 7,
+	  set_TxPwrOn = 8
+  };
+
+  IP4_ADDR(&gw, 192,168,222,1);
+  IP4_ADDR(&ipaddr, 192,168,222,2);
+  IP4_ADDR(&netmask, 255,255,255,0);
+
+  tcpip_init(NULL, NULL);
+
+  netifapi_netif_add(&netif, &ipaddr, &netmask, &gw, NULL, slipif_init, tcpip_input);
+  netif_set_default(&netif);
+  netif_set_up(&netif);
+
+
+  xUdpConn = netconn_new( NETCONN_UDP );
+  netconn_bind(xUdpConn, &ipaddr, 1234);
+
+  xBuf = (void*)mem_malloc(10);
+  memset(xBuf,0xAA,10);
+  xNetBuf = netbuf_new ();
+  netbuf_ref ( xNetBuf, xBuf, 10 );
+
+  IP4_ADDR(&ipaddr, 192,168,222,1);
+
   while (TRUE) {
-    palSetPad(GPIOD, GPIOD_LED3);       /* Orange.  */
-    chThdSleepMilliseconds(500);
-    palClearPad(GPIOD, GPIOD_LED3);     /* Orange.  */
-    chThdSleepMilliseconds(500);
+    //chThdSleepMilliseconds(1500);
+    //palSetPad(GPIOD, GPIOD_LED3);       /* Orange.  */
+    netconn_recv (xUdpConn, &RecvBuf);
+
+    if(netbuf_len(RecvBuf) == sizeof(struct netcommand)){
+    	netbuf_copy(RecvBuf, &netcommand_buf, sizeof(netcommand_buf));
+    	netcommand_buf.command = ntohl(netcommand_buf.command);
+    }
+    else{
+    	netbuf_delete(RecvBuf);
+    	continue;
+    }
+
+    switch((enum netcommand_type)netcommand_buf.type){
+    	case(set_syn):
+			spiSelect(&SPID2);
+    		spiSend(&SPID2, 2, (uint16_t *)&(netcommand_buf.command));
+    		spiUnselect(&SPID2);
+			break;
+    	case(set_TxAtt):
+			netcommand_buf.command = BitReverseTable64[netcommand_buf.command&(63)]<<8;
+			spiSend(&SPID2, 1, &(netcommand_buf.command));
+			palSetPad(GPIOD, 8);
+			while(!palReadPad(GPIOD, 8));
+			palClearPad(GPIOD, 8);
+			break;
+    	case(set_RxAtt):
+			palClearPort(GPIOD, (31)<<1);
+			palSetPort(GPIOD, (netcommand_buf.command&(31))<<1);
+			if(netcommand_buf.addr == 1){
+				palSetPad(GPIOD, 0);
+				while(!palReadPad(GPIOD, 0));
+				palClearPad(GPIOD, 0);
+			}
+			if(netcommand_buf.addr<=4 && netcommand_buf.addr>=2){
+				palSetPad(GPIOC, 14-netcommand_buf.addr);
+				while(!palReadPad(GPIOC, 14-netcommand_buf.addr));
+				palClearPad(GPIOC, 14-netcommand_buf.addr);
+			}
+    		break;
+    	case(set_LOAtt):
+    		palClearPort(GPIOD, (31)<<11);
+    		palSetPort(GPIOD, (netcommand_buf.command&(31))<<11);
+    		palSetPad(GPIOD, 9);
+    		while(!palReadPad(GPIOD, 9));
+    		palClearPad(GPIOD, 9);
+    		break;
+    	case(set_InSel):
+
+    	default:
+    		break;
+
+
+    }
+
+    netbuf_delete(RecvBuf);
+    //palClearPad(GPIOD, GPIOD_LED3);    /* Orange.  */
   }
+
 }
 
 /*
@@ -187,14 +295,6 @@ int main(void) {
    * - Kernel initialization, the main() function becomes a thread and the
    *   RTOS is active.
    */
-
-  /* Network interface variables */
-  struct ip_addr ipaddr, netmask, gw;
-  struct netif netif;
-  struct netconn *xUdpConn;
-  struct netbuf  *xNetBuf;
-  void *xBuf;
-  int i;
 
   halInit();
   chSysInit();
@@ -224,8 +324,26 @@ int main(void) {
    */
   spiStart(&SPID2, &spi2cfg);
   palSetPad(GPIOB, 12);
+  palClearPad(GPIOD, 8);
+  palClearPad(GPIOD, 9);
   palSetPadMode(GPIOB, 12, PAL_MODE_OUTPUT_PUSHPULL |
                            PAL_STM32_OSPEED_HIGHEST);           /* NSS.     */
+  palSetPadMode(GPIOD, 8, PAL_MODE_OUTPUT_PUSHPULL |
+		                   PAL_STM32_OSPEED_HIGHEST);           /* AttLE    */
+  palSetPadMode(GPIOD, 9, PAL_MODE_OUTPUT_PUSHPULL |
+  		                   PAL_STM32_OSPEED_HIGHEST);           /* Rx LO AttLE */
+  palSetGroupMode(GPIOD, 0xF800, 0, PAL_MODE_OUTPUT_PUSHPULL |
+                           PAL_STM32_OSPEED_HIGHEST);           /*MTx[C8:C0p5] */
+  palSetGroupMode(GPIOD, 0x003F, 0, PAL_MODE_OUTPUT_PUSHPULL |
+                           PAL_STM32_OSPEED_HIGHEST);           /*MRx[C8:C0p5] + Ant1LEin*/
+  palSetGroupMode(GPIOC, 0x1C00, 0, PAL_MODE_OUTPUT_PUSHPULL |
+                           PAL_STM32_OSPEED_HIGHEST);           /*Ant(2-4)LEin*/
+  palSetGroupMode(GPIOE, 0x0003, 0, PAL_MODE_OUTPUT_PUSHPULL |
+                           PAL_STM32_OSPEED_HIGHEST);           /*InSel[1:0]*/
+  palSetGroupMode(GPIOB, 0x0300, 0, PAL_MODE_OUTPUT_PUSHPULL |
+                           PAL_STM32_OSPEED_HIGHEST);           /*InSel[3:2]*/
+  palSetGroupMode(GPIOE, 0x3800, 0, PAL_MODE_OUTPUT_PUSHPULL |
+                           PAL_STM32_OSPEED_HIGHEST);           /*PAEN,OOKONOFF*/
   palSetPadMode(GPIOB, 13, PAL_MODE_ALTERNATE(5) |
                            PAL_STM32_OSPEED_HIGHEST);           /* SCK.     */
   palSetPadMode(GPIOB, 14, PAL_MODE_ALTERNATE(5));              /* MISO.    */
@@ -244,8 +362,8 @@ int main(void) {
    * Initializes the PWM driver 4, routes the TIM4 outputs to the board LEDs.
    */
   pwmStart(&PWMD4, &pwmcfg);
-  palSetPadMode(GPIOD, GPIOD_LED4, PAL_MODE_ALTERNATE(2));  /* Green.   */
-  palSetPadMode(GPIOD, GPIOD_LED6, PAL_MODE_ALTERNATE(2));  /* Blue.    */
+  //palSetPadMode(GPIOD, GPIOD_LED4, PAL_MODE_ALTERNATE(2));  /* Green.   */
+  //palSetPadMode(GPIOD, GPIOD_LED6, PAL_MODE_ALTERNATE(2));  /* Blue.    */
 
   /*
    * Creates the example thread.
@@ -259,36 +377,10 @@ int main(void) {
    * driver 2.
    */
 
-  /* Set network address variables */
-  IP4_ADDR(&gw, 192,168,0,1);
-  IP4_ADDR(&ipaddr, 192,168,0,2);
-  IP4_ADDR(&netmask, 255,255,255,0);
-
-  tcpip_init(NULL, NULL);
-
-  netifapi_netif_add(&netif, &ipaddr, &netmask, &gw, NULL, slipif_init, tcpip_input);
-  netif_set_default(&netif);
-  netif_set_up(&netif);
-
-
-  xUdpConn = netconn_new( NETCONN_UDP );
-  netconn_bind(xUdpConn, &ipaddr, 1234);
-
-  xBuf = (void*)mem_malloc(10);
-  memset(xBuf,0xAA,10);
-  xNetBuf = netbuf_new ();
-  netbuf_ref ( xNetBuf, xBuf, 10 );
-
-
-  IP4_ADDR(&ipaddr, 192,168,0,255);
-
   while (TRUE) {
     if (palReadPad(GPIOA, GPIOA_BUTTON))
       TestThread(&SD2);
     chThdSleepMilliseconds(500);
-    for(i = 1000;i>0;i--){
-        netconn_sendto(xUdpConn, xNetBuf, &ipaddr, 1234);
-    }
 
   }
 }

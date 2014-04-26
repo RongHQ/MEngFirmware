@@ -67,6 +67,8 @@
 #include "lwip/sio.h"
 #include "lwip/sys.h"
 
+//#include "hal.h"
+
 #define SLIP_END     0xC0 /* 0300: start and end of every packet */
 #define SLIP_ESC     0xDB /* 0333: escape start (one byte escaped data follows) */
 #define SLIP_ESC_END 0xDC /* 0334: following escape: original byte is 0xC0 (END) */
@@ -223,6 +225,7 @@ slipif_rxbyte(struct netif *netif, u8_t c)
 
     if (priv->p == NULL) {
       LINK_STATS_INC(link.drop);
+      //palSetPad(GPIOD, GPIOD_LED6);
       LWIP_DEBUGF(SLIP_DEBUG, ("slipif_input: no new pbuf! (DROP)\n"));
       /* don't process any further since we got no pbuf to receive to */
       return NULL;
@@ -269,6 +272,7 @@ slipif_rxbyte_input(struct netif *netif, u8_t c)
   struct pbuf *p;
   p = slipif_rxbyte(netif, c);
   if (p != NULL) {
+	//palTogglePad(GPIOD, GPIOD_LED4);
     if (netif->input(p, netif) != ERR_OK) {
       pbuf_free(p);
     }
@@ -290,10 +294,11 @@ slipif_loop_thread(void *nf)
   struct netif *netif = (struct netif *)nf;
   struct slipif_priv *priv = (struct slipif_priv *)netif->state;
 
-  while (1) {
-    if (sio_read(priv->sd, &c, 1) > 0) {
-      slipif_rxbyte_input(netif, c);
-    }
+  while (1)
+  {
+	  if (sio_read(priv->sd, &c, 1) > 0) {
+        slipif_rxbyte_input(netif, c);
+      }
   }
 }
 #endif /* SLIP_USE_RX_THREAD */

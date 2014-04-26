@@ -54,6 +54,8 @@
 
 #include <string.h>
 
+//#include "hal.h"
+
 #define SET_NONBLOCKING_CONNECT(conn, val)  do { if(val) { \
   (conn)->flags |= NETCONN_FLAG_IN_NONBLOCKING_CONNECT; \
 } else { \
@@ -201,6 +203,8 @@ recv_udp(void *arg, struct udp_pcb *pcb, struct pbuf *p,
 #endif /* LWIP_SO_RCVBUF */
     /* Register event with callback */
     API_EVENT(conn, NETCONN_EVT_RCVPLUS, len);
+    //palTogglePad(GPIOD, GPIOD_LED4);
+
   }
 }
 #endif /* LWIP_UDP */
