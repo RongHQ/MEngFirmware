@@ -16,7 +16,7 @@
 
 #include "ch.h"
 #include "hal.h"
-#include "test.h"
+//#include "test.h"
 #include <string.h>
 #include "chprintf.h"
 
@@ -43,10 +43,10 @@ static void adccb(ADCDriver *adcp, adcsample_t *buffer, size_t n);
 static void spicb(SPIDriver *spip);
 
 /* Total number of channels to be sampled by a single ADC operation.*/
-#define ADC_GRP1_NUM_CHANNELS   2
+#define ADC_GRP1_NUM_CHANNELS   4
 
 /* Depth of the conversion buffer, channels are sampled four times each.*/
-#define ADC_GRP1_BUF_DEPTH      4
+#define ADC_GRP1_BUF_DEPTH      64
 
 /*
  * ADC samples buffer.
@@ -67,11 +67,13 @@ static const ADCConversionGroup adcgrpcfg = {
   /* HW dependent part.*/
   0,
   ADC_CR2_SWSTART,
-  ADC_SMPR1_SMP_AN11(ADC_SAMPLE_56) | ADC_SMPR1_SMP_SENSOR(ADC_SAMPLE_144),
+  ADC_SMPR2_SMP_AN4(ADC_SAMPLE_28) | ADC_SMPR2_SMP_AN5(ADC_SAMPLE_28) | \
+  ADC_SMPR2_SMP_AN6(ADC_SAMPLE_28) | ADC_SMPR2_SMP_AN7(ADC_SAMPLE_28),
   0,
   ADC_SQR1_NUM_CH(ADC_GRP1_NUM_CHANNELS),
   0,
-  ADC_SQR3_SQ2_N(ADC_CHANNEL_IN11) | ADC_SQR3_SQ1_N(ADC_CHANNEL_SENSOR)
+  ADC_SQR3_SQ1_N(ADC_CHANNEL_IN4) | ADC_SQR3_SQ2_N(ADC_CHANNEL_IN5) | \
+  ADC_SQR3_SQ3_N(ADC_CHANNEL_IN6) | ADC_SQR3_SQ4_N(ADC_CHANNEL_IN7)
 };
 
 /*
@@ -105,6 +107,8 @@ static const SPIConfig spi2cfg =
   GPIOB, 12,
   SPI_CR1_DFF | SPI_CR1_LSBFIRST |SPI_CR1_BR_1 };
 
+struct netconn *xUdpConn;
+
 /*
  * PWM cyclic callback.
  * A new ADC conversion is started.
@@ -132,24 +136,17 @@ void adccb(ADCDriver *adcp, adcsample_t *buffer, size_t n) {
   /* Note, only in the ADC_COMPLETE state because the ADC driver fires an
      intermediate callback when the buffer is half full.*/
   if (adcp->state == ADC_COMPLETE) {
-    adcsample_t avg_ch1, avg_ch2;
+	  struct netbuf  *xNetBuf;
+	  struct ip_addr ipaddr;
 
-    /* Calculates the average values from the ADC samples.*/
-    avg_ch1 = (samples[0] + samples[2] + samples[4] + samples[6]) / 4;
-    avg_ch2 = (samples[1] + samples[3] + samples[5] + samples[7]) / 4;
+	  IP4_ADDR(&ipaddr, 192,168,222,1);
 
-    chSysLockFromIsr();
+	  xNetBuf = netbuf_new ();
+	  netbuf_ref ( xNetBuf, buffer, sizeof(samples));
 
-    /* Changes the channels pulse width, the change will be effective
-       starting from the next cycle.*/
-    pwmEnableChannelI(&PWMD4, 0, PWM_FRACTION_TO_WIDTH(&PWMD4, 4096, avg_ch1));
-    pwmEnableChannelI(&PWMD4, 3, PWM_FRACTION_TO_WIDTH(&PWMD4, 4096, avg_ch2));
+	  netconn_sendto(xUdpConn, xNetBuf, &ipaddr, 1234);
+	  netbuf_delete(xNetBuf);
 
-    /* SPI slave selection and transmission start.*/
-    //spiSelectI(&SPID2);
-    //spiStartSendI(&SPID2, ADC_GRP1_NUM_CHANNELS * ADC_GRP1_BUF_DEPTH, samples);
-
-    chSysUnlockFromIsr();
   }
 }
 
@@ -168,6 +165,7 @@ static void spicb(SPIDriver *spip) {
  * This is a periodic thread that does absolutely nothing except flashing
  * a LED.
  */
+
 static WORKING_AREA(waThread1, 128);
 static msg_t Thread1(void *arg) {
 
@@ -177,10 +175,9 @@ static msg_t Thread1(void *arg) {
   /* Network interface variables */
   struct ip_addr ipaddr, netmask, gw;
   struct netif netif;
-  struct netconn *xUdpConn;
-  struct netbuf  *xNetBuf;
+  //struct netbuf  *xNetBuf;
   struct netbuf  *RecvBuf;
-  void *xBuf;
+  //void *xBuf;
   int i;
   struct netcommand{
 	  uint8_t type;
@@ -216,12 +213,12 @@ static msg_t Thread1(void *arg) {
   xUdpConn = netconn_new( NETCONN_UDP );
   netconn_bind(xUdpConn, &ipaddr, 1234);
 
-  xBuf = (void*)mem_malloc(10);
-  memset(xBuf,0xAA,10);
-  xNetBuf = netbuf_new ();
-  netbuf_ref ( xNetBuf, xBuf, 10 );
+  //xBuf = (void*)mem_malloc(10);
+  //memset(xBuf,0xAA,10);
+  //xNetBuf = netbuf_new ();
+  //netbuf_ref ( xNetBuf, xBuf, 10 );
 
-  IP4_ADDR(&ipaddr, 192,168,222,1);
+  //IP4_ADDR(&ipaddr, 192,168,222,1);
 
   while (TRUE) {
     //chThdSleepMilliseconds(1500);
@@ -307,7 +304,9 @@ static msg_t Thread1(void *arg) {
     	    	palSetPad(GPIOE, 12);
     	    	palClearPad(GPIOE, 13);
     	    }
-    	    		break;
+    	    break;
+    	case(set_reportOpt):
+			adcStartConversion(&ADCD1, &adcgrpcfg, samples, ADC_GRP1_BUF_DEPTH);
     	default:
     		break;
 
@@ -349,8 +348,8 @@ int main(void) {
    * executed immediately before activating the various device drivers in
    * order to not alter the benchmark scores.
    */
-  if (palReadPad(GPIOA, GPIOA_BUTTON))
-    TestThread(&SD2);
+  //if (palReadPad(GPIOA, GPIOA_BUTTON))
+    //TestThread(&SD2);
 
   /*
    * Initializes the SPI driver 2. The SPI2 signals are routed as follow:
@@ -394,12 +393,13 @@ int main(void) {
    */
   adcStart(&ADCD1, NULL);
   adcSTM32EnableTSVREFE();
-  palSetPadMode(GPIOC, 1, PAL_MODE_INPUT_ANALOG);
+  palSetPadMode(GPIOC, 0, PAL_MODE_INPUT_ANALOG);
+  palSetGroupMode(GPIOA, 0x00F0, 0, PAL_MODE_INPUT_ANALOG);           /*A[7:4] */
 
   /*
    * Initializes the PWM driver 4, routes the TIM4 outputs to the board LEDs.
    */
-  pwmStart(&PWMD4, &pwmcfg);
+  //pwmStart(&PWMD4, &pwmcfg);
   //palSetPadMode(GPIOD, GPIOD_LED4, PAL_MODE_ALTERNATE(2));  /* Green.   */
   //palSetPadMode(GPIOD, GPIOD_LED6, PAL_MODE_ALTERNATE(2));  /* Blue.    */
 
@@ -416,9 +416,7 @@ int main(void) {
    */
 
   while (TRUE) {
-    if (palReadPad(GPIOA, GPIOA_BUTTON))
-      TestThread(&SD2);
-    chThdSleepMilliseconds(500);
+    chThdSleepMilliseconds(5000);
 
   }
 }
