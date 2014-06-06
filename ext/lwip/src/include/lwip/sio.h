@@ -138,6 +138,10 @@ u32_t sio_write(sio_fd_t fd, u8_t *data, u32_t len);
 void sio_read_abort(sio_fd_t fd);
 #endif
 
+#ifndef sio_read_abort
+void sio_set_serial_driver(void *netcom1);
+#endif
+
 #ifdef __cplusplus
 }
 #endif

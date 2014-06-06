@@ -19,12 +19,14 @@
 //#include "test.h"
 #include <string.h>
 #include "chprintf.h"
+#include "usbcfg.h"
 
 #include "lwip/arch.h"
 #include "lwip/api.h"
 #include "lwip/netbuf.h"
 #include "lwip/netifapi.h"
 #include "lwip/mem.h"
+#include "lwip/sio.h"
 
 #include <lwip/tcpip.h>
 #include <netif/slipif.h>
@@ -37,6 +39,8 @@ static const unsigned char BitReverseTable64[] =
   0x0C, 0x8C, 0x4C, 0xCC, 0x2C, 0xAC, 0x6C, 0xEC, 0x1C, 0x9C, 0x5C, 0xDC, 0x3C, 0xBC, 0x7C, 0xFC
 };
 
+/* Virtual serial port over USB.*/
+SerialUSBDriver SDU1;
 
 static void pwmpcb(PWMDriver *pwmp);
 static void adccb(ADCDriver *adcp, adcsample_t *buffer, size_t n);
@@ -307,6 +311,7 @@ static msg_t Thread1(void *arg) {
     	    break;
     	case(set_reportOpt):
 			adcStartConversion(&ADCD1, &adcgrpcfg, samples, ADC_GRP1_BUF_DEPTH);
+    		break;
     	default:
     		break;
 
@@ -334,6 +339,22 @@ int main(void) {
 
   halInit();
   chSysInit();
+
+  /*
+   * Initializes a serial-over-USB CDC driver.
+   */
+  sduObjectInit(&SDU1);
+  sduStart(&SDU1, &serusbcfg);
+
+  /*
+   * Activates the USB driver and then the USB bus pull-up on D+.
+   * Note, a delay is inserted in order to not have to disconnect the cable
+   * after a reset.
+   */
+  usbDisconnectBus(serusbcfg.usbp);
+  chThdSleepMilliseconds(1000);
+  usbStart(serusbcfg.usbp, &usbcfg);
+  usbConnectBus(serusbcfg.usbp);
 
   /*
    * Activates the serial driver 2 using the driver default configuration.
@@ -416,7 +437,14 @@ int main(void) {
    */
 
   while (TRUE) {
-    chThdSleepMilliseconds(5000);
+    chThdSleepMilliseconds(500);
+    if (SDU1.config->usbp->state == USB_ACTIVE) {
+    	sio_set_serial_driver(&SDU1);
+    }
+    else{
+    	sio_set_serial_driver(NETCOM);
+    }
 
   }
 }
+

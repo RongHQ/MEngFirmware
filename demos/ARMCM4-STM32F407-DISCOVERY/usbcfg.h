@@ -14,27 +14,12 @@
     limitations under the License.
 */
 
-#include "ch.h"
-#include "hal.h"
-#include "lwip/sio.h"
+#ifndef _USBCFG_H_
+#define _USBCFG_H_
 
-BaseChannel *netcom = (BaseChannel *)NETCOM;
+extern const USBConfig usbcfg;
+extern SerialUSBConfig serusbcfg;
 
-sio_fd_t sio_open(u8_t devnum){
-  devnum;
-  return (sio_fd_t)1;
-}
+#endif  /* _USBCFG_H_ */
 
-void sio_send(u8_t c, sio_fd_t fd){
-  fd;
-  chnPutTimeout(netcom,c,TIME_INFINITE);
-}
-
-u32_t sio_read(sio_fd_t fd, u8_t *data, u32_t len){  
-  fd;
-  return chnRead(netcom,data,len);
-}
-
-void sio_set_serial_driver(void *netcom1){
-  netcom = (BaseChannel *)netcom1;
-}
+/** @} */

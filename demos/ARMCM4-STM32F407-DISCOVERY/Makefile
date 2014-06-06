@@ -88,7 +88,7 @@ CSRC = $(PORTSRC) \
        $(LWSRC) \
        $(CHIBIOS)/os/various/chprintf.c \
        $(CHIBIOS)/os/various/evtimer.c \
-       main.c
+       usbcfg.c main.c
 
 # C++ sources that can be compiled in ARM or THUMB mode depending on the global
 # setting.
