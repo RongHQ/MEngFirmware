@@ -23,7 +23,7 @@
 				</dictionary>
 				<dictionary>
 					<key>org.eclipse.cdt.make.core.buildArguments</key>
-					<value>-j</value>
+					<value></value>
 				</dictionary>
 				<dictionary>
 					<key>org.eclipse.cdt.make.core.buildCommand</key>
@@ -77,9 +77,9 @@
 	</natures>
 	<linkedResources>
 		<link>
-			<name>board</name>
+			<name>ST_STM32F4_DISCOVERY</name>
 			<type>2</type>
-			<locationURI>CHIBIOS/boards/ST_STM32F4_DISCOVERY</locationURI>
+			<location>/home/yunfei/workspace/MEngFirmware/boards/ST_STM32F4_DISCOVERY</location>
 		</link>
 		<link>
 			<name>os</name>
