@@ -203,6 +203,8 @@ static msg_t Thread1(void *arg) {
 
 #define PWR_MAGIC 0xA0A0BEEF
 
+  chThdSleepMilliseconds(500);
+
   IP4_ADDR(&gw, 192,168,222,1);
   IP4_ADDR(&ipaddr, 192,168,222,2);
   IP4_ADDR(&netmask, 255,255,255,0);
@@ -427,6 +429,15 @@ int main(void) {
   /*
    * Creates the example thread.
    */
+
+  chThdSleepMilliseconds(2000);
+  if (SDU1.config->usbp->state == USB_SELECTED || SDU1.config->usbp->state == USB_ACTIVE) {
+      sio_set_serial_driver(&SDU1);
+  }
+  else{
+	  sio_set_serial_driver(NETCOM);
+  }
+
   chThdCreateStatic(waThread1, sizeof(waThread1), NORMALPRIO, Thread1, NULL);
 
   /*
@@ -438,13 +449,6 @@ int main(void) {
 
   while (TRUE) {
     chThdSleepMilliseconds(500);
-    if (SDU1.config->usbp->state == USB_ACTIVE) {
-    	sio_set_serial_driver(&SDU1);
-    }
-    else{
-    	sio_set_serial_driver(NETCOM);
-    }
-
   }
 }
 
